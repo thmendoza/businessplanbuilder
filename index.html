@@ -1248,6 +1248,80 @@
     </div>
 
     <script>
+        <script>
+  // ===============================
+  // GitHub Pages → Google Apps Script storage bridge
+  // Keeps original UI + logic unchanged
+  // ===============================
+
+  const APPS_SCRIPT_URL =
+    "https://script.google.com/macros/s/AKfycbxq1lNGPH-yyWA25C8oPysSXUyOcSq27AXEuI7Z_V9vf4bXQYiWzePrEjgQzz3xGXvDUQ/exec";
+
+  async function apiGet(action, params = {}) {
+    const url = new URL(APPS_SCRIPT_URL);
+    url.searchParams.set("action", action);
+    Object.entries(params).forEach(([k, v]) =>
+      url.searchParams.set(k, v ?? "")
+    );
+    const res = await fetch(url.toString());
+    return await res.json();
+  }
+
+  async function apiPost(action, params = {}) {
+    const body = new URLSearchParams();
+    body.set("action", action);
+    Object.entries(params).forEach(([k, v]) =>
+      body.set(k, v ?? "")
+    );
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
+      },
+      body: body.toString()
+    });
+
+    return await res.json();
+  }
+
+  // 🔑 THIS IS THE FIX
+  // We recreate window.storage so your existing code works
+  window.storage = {
+    async get(key) {
+      const name = businessPlan?.studentName || "";
+      const result = await apiGet("load", {
+        studentId: key,
+        studentName: name
+      });
+
+      if (result && result.found && result.data) {
+        return { value: result.data };
+      }
+      return null;
+    },
+
+    async set(key, value, isShared) {
+      const parsed = JSON.parse(value);
+
+      // Draft save
+      if (!key.startsWith("submission_")) {
+        return await apiPost("save", {
+          studentId: key,
+          studentName: parsed.studentName,
+          data: value
+        });
+      }
+
+      // Final submission
+      return await apiPost("submit", {
+        studentId: parsed.studentId || key.replace("submission_", ""),
+        studentName: parsed.studentName,
+        ...parsed
+      });
+    }
+  };
+
         let currentSection = 1;
         const totalSections = 7;
         let businessPlan = {};
